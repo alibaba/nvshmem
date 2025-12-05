@@ -56,6 +56,10 @@ struct nvshmemt_ib_gid_info {
     int32_t local_gid_index;
 };
 
+struct nvshmemt_ib_traffic_class_info {
+    int global_tclass;
+};
+
 struct nvshmemt_ibv_function_table {
     int (*fork_init)(void);
     struct ibv_ah *(*create_ah)(struct ibv_pd *pd, struct ibv_ah_attr *ah_attr);
@@ -125,6 +129,9 @@ int nvshmemt_ib_common_reg_mem_handle(struct nvshmemt_ibv_function_table *ftable
 
 int nvshmemt_ib_common_release_mem_handle(struct nvshmemt_ibv_function_table *ftable,
                                           nvshmem_mem_handle_t *mem_handle, int log_level);
+
+int nvshmemt_ib_get_tclass(const char *ib_device_name, int port_number, int log_level,
+                           struct nvshmemi_options_s *options);
 
 /* The following code is for dynamic GID detection for RoCE platforms.
    It has been adapted from NCCL: https://gitlab-master.nvidia.com/nccl/nccl/-/merge_requests/359 */
