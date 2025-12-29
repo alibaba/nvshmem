@@ -219,6 +219,9 @@ NVSHMEMI_ENV_DEF(CUMEM_HANDLE_TYPE, string, "FILE_DESCRIPTOR", NVSHMEMI_ENV_CAT_
 NVSHMEMI_ENV_DEF(BYPASS_ACCESSIBILITY_CHECK, bool, false, NVSHMEMI_ENV_CAT_HIDDEN,
                  "Bypass peer GPU accessbility checks")
 
+NVSHMEMI_ENV_DEF(HCA_COUNT_REQUIRING_TOPO_FIX, int, 4, NVSHMEMI_ENV_CAT_OTHER,
+                 "HCA count that requires topology fix (default: 4)")
+
 #if defined(NVSHMEM_PPC64LE) || defined(NVSHMEM_ENV_ALL)
 NVSHMEMI_ENV_DEF(CUDA_LIMIT_STACK_SIZE, size, (size_t)(0), NVSHMEMI_ENV_CAT_OTHER,
                  "Specify limit on stack size of each GPU thread on P9")

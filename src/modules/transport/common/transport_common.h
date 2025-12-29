@@ -45,6 +45,8 @@
 #define STORE_BARRIER() MEM_BARRIER()
 #define LOAD_BARRIER() MEM_BARRIER()
 #endif
+#define MAX_DEVICES 128
+#define MAX_NAME_LEN 256
 
 #define INFO(LOG_LEVEL, fmt, ...)                                                  \
     do {                                                                           \
@@ -101,6 +103,11 @@ struct nvshmemt_hca_info {
     int found;
 };
 
+struct nvshmemt_hca_bdf_info {
+    char name[64];
+    char *bdf;
+};
+
 typedef int (*pci_path_cb)(int dev, char **pcipath, struct nvshmem_transport *transport);
 
 int nvshmemt_parse_hca_list(const char *string, struct nvshmemt_hca_info *hca_list, int max_count,
@@ -121,6 +128,9 @@ int nvshmemt_mem_handle_cache_remove(nvshmem_transport_t t,
 int nvshmemt_mem_handle_cache_fini(struct transport_mem_handle_info_cache *cache);
 
 bool check_egm(void *addr, std::unordered_map<void *, size_t> *egm_map);
+
+void sort_hca_bdf_list(nvshmemt_hca_bdf_info *list, int num_entries);
+
 extern "C" {
 int nvshmemt_init(nvshmem_transport_t *transport, struct nvshmemi_cuda_fn_table *table,
                   int api_version);

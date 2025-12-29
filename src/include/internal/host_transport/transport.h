@@ -176,6 +176,8 @@ typedef struct nvshmem_transport {
     int n_pes;
     std::unordered_map<void *, void *> *alias_va_map;
     std::unordered_map<void *, size_t> *egm_map;
+    int num_hca_devices;
+    bool need_topo_fix;
 } nvshmem_transport_v1;
 
 typedef nvshmem_transport_v1 *nvshmem_transport_t;

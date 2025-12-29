@@ -104,6 +104,8 @@ bool nvshmemt_mlx5dv_dmabuf_capable(ibv_context *context,
                                     struct nvshmemt_ibv_function_table *ftable,
                                     struct nvshmemt_mlx5dv_function_table *mlx5dv_ftable);
 
+int nvshmemt_get_ib_iface_bdf(char *ib_name, char **bdf);
+
 int nvshmemt_ib_iface_get_mlx_path(ibv_device *dev, ibv_context *ctx, char **path,
                                    struct nvshmemt_ibv_function_table *ftable,
                                    struct nvshmemt_mlx5dv_function_table *mlx5dv_ftable,

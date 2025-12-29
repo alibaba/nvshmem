@@ -1607,6 +1607,35 @@ out_already_connected:
     return status;
 }
 
+static int get_device_index_by_bondname(char* device_name, struct ibv_device **device, int num_devices) {
+    int i;
+    int device_index = -1;
+    for (i=0; i< num_devices; i++) {
+        const char *name = ftable.get_device_name(device[i]);
+        if (strcmp(name, device_name) == 0) {
+            device_index = i;
+            break;
+        }
+    }
+    return device_index;
+}
+
+static int get_device_index(char *hca_name, struct ibv_device **device, int num_of_devices) {
+    int i;
+    int device_index = -1;
+    if (hca_name == NULL) {
+        return -1;
+    }
+    for (i = 0; i < num_of_devices; i++) {
+        const char * name = ftable.get_device_name(device[i]);
+        if (strcmp(name, hca_name) == 0) {
+            device_index = i;
+            return device_index;
+        }
+    }
+    return device_index;
+}
+
 int nvshmemt_init(nvshmem_transport_t *t, struct nvshmemi_cuda_fn_table *table, int api_version) {
     int status = 0;
     struct nvshmem_transport *transport = NULL;
@@ -1619,11 +1648,13 @@ int nvshmemt_init(nvshmem_transport_t *t, struct nvshmemi_cuda_fn_table *table, 
     int exclude_list = 0;
     struct nvshmemt_hca_info hca_list[MAX_NUM_HCAS];
     struct nvshmemt_hca_info pe_hca_mapping[MAX_NUM_PES_PER_NODE];
+    struct nvshmemt_hca_bdf_info *hca_bdf_list = NULL;
     int hca_list_count = 0, pe_hca_map_count = 0, user_selection = 0;
     int offset = 0;
     int flag;
     connected_qp_count = 0;
     CUdevice gpu_device_id;
+    int gpu_count = 0;
 
     if (NVSHMEM_TRANSPORT_MAJOR_VERSION(api_version) != NVSHMEM_TRANSPORT_PLUGIN_MAJOR_VERSION) {
         NVSHMEMI_ERROR_PRINT(
@@ -1698,6 +1729,10 @@ int nvshmemt_init(nvshmem_transport_t *t, struct nvshmemi_cuda_fn_table *table, 
     ibrc_state->port_ids = (int *)malloc(MAX_NUM_PES_PER_NODE * sizeof(int));
     NVSHMEMI_NULL_ERROR_JMP(ibrc_state->port_ids, status, NVSHMEMX_ERROR_OUT_OF_MEMORY, out,
                             "malloc failed \n");
+    hca_bdf_list = (struct nvshmemt_hca_bdf_info *)malloc(MAX_NUM_PES_PER_NODE * sizeof(struct nvshmemt_hca_bdf_info));
+    NVSHMEMI_NULL_ERROR_JMP(hca_bdf_list, status, NVSHMEMX_ERROR_OUT_OF_MEMORY, out,
+                            "hca_bdf_info list allocation failed \n");
+    memset(hca_bdf_list, 0, MAX_NUM_PES_PER_NODE * sizeof(struct nvshmemt_hca_bdf_info));
 
     status = pthread_mutex_init(&ibrc_mutex_send_progress, NULL);
     NVSHMEMI_NZ_ERROR_JMP(status, NVSHMEMX_ERROR_INTERNAL, out, "pthread_mutex_init failed \n");
@@ -1722,6 +1757,12 @@ int nvshmemt_init(nvshmem_transport_t *t, struct nvshmemi_cuda_fn_table *table, 
     }
     ibrc_srq_depth = ibrc_state->options->SRQ_DEPTH;
     ibrc_qp_depth = ibrc_state->options->QP_DEPTH;
+    transport->num_hca_devices = num_devices; //get the number of active IB devices
+    transport->need_topo_fix = ibrc_state->options->ENABLE_TOPO_AWARE_HCA_SELECTION;
+    status = cudaGetDeviceCount(&gpu_count);
+    if (status != CUDA_SUCCESS) {
+        NVSHMEMI_WARN_PRINT("Get gpu count err, which may cause device select error!");
+    }
 
     if (ibrc_state->options->HCA_LIST_provided) {
         user_selection = 1;
@@ -1743,12 +1784,76 @@ int nvshmemt_init(nvshmem_transport_t *t, struct nvshmemi_cuda_fn_table *table, 
                                         MAX_NUM_PES_PER_NODE, ibrc_state->log_level);
         }
     }
+    if (ibrc_state->options->ENABLE_TOPO_AWARE_HCA_SELECTION && pe_hca_map_count) {
+        // get IB devices name and bdf from NVSHMEM_HCA_PE_MAPPING input
+        for (int i = 0; i < num_devices; i++) {
+            strncpy(hca_bdf_list[i].name, pe_hca_mapping[i].name , sizeof(pe_hca_mapping[i].name));
+            status = nvshmemt_get_ib_iface_bdf(pe_hca_mapping[i].name, &hca_bdf_list[i].bdf);
+            NVSHMEMI_NZ_ERROR_JMP(status, NVSHMEMX_ERROR_INTERNAL, out, "get mlx device bdf failed");
+            INFO(ibrc_state->log_level, "Get IB device name %s, bdf %s", hca_bdf_list[i].name, hca_bdf_list[i].bdf);
+        }
+        sort_hca_bdf_list(hca_bdf_list, pe_hca_map_count);
+        for (int i = 0; i < num_devices; i++) {
+            INFO(ibrc_state->log_level, "Sorted IB device name %s, bdf %s", hca_bdf_list[i].name, hca_bdf_list[i].bdf);
+        }
+    } else if (ibrc_state->options->ENABLE_TOPO_AWARE_HCA_SELECTION) {
+        // get IB devices name from device_list
+        for (int i = 0; i < num_devices; i++) {
+            const char *name = ftable.get_device_name(dev_list[i]);
+            NVSHMEMI_NULL_ERROR_JMP(name, status, NVSHMEMX_ERROR_INTERNAL, out,
+                "ibv_get_device_name failed \n");
+            strncpy(hca_bdf_list[i].name, name, sizeof(hca_bdf_list[i].name) - 1);
+            hca_bdf_list[i].name[sizeof(hca_bdf_list[i].name) - 1] = '\0';
+            status = nvshmemt_get_ib_iface_bdf(hca_bdf_list[i].name, &hca_bdf_list[i].bdf);
+            NVSHMEMI_NZ_ERROR_JMP(status, NVSHMEMX_ERROR_INTERNAL, out, "get mlx device bdf failed");
+            INFO(ibrc_state->log_level, "Get IB device name %s, bdf %s", hca_bdf_list[i].name, hca_bdf_list[i].bdf);
+        }
+        sort_hca_bdf_list(hca_bdf_list, num_devices);
+        for (int i = 0; i < num_devices; i++) {
+            INFO(ibrc_state->log_level, "Sorted IB device name %s, bdf %s", hca_bdf_list[i].name, hca_bdf_list[i].bdf);
+        }
+    } else
+        INFO(ibrc_state->log_level, "No TOPO fix optimization applied");
 
     INFO(ibrc_state->log_level,
          "Begin - Enumerating IB devices in the system ([<dev_id, device_name, num_ports>]) - ");
     for (int i = 0; i < num_devices; i++) {
         device = (struct ibrc_device *)ibrc_state->devices + i;
-        device->dev = dev_list[i];
+        if (ibrc_state->options->ENABLE_TOPO_AWARE_HCA_SELECTION && (gpu_count > transport->num_hca_devices)) {
+            //make sure only 4 nic enter this logic
+            INFO(ibrc_state->log_level, "Select ib device by net device order");
+            int idx;
+            idx = get_device_index_by_bondname(hca_bdf_list[i].name, dev_list, num_devices);
+            if (idx < 0) {
+                NVSHMEMI_WARN_PRINT(
+                    "Unable to find IB device for the given ib device %s, rollback to default \n", hca_bdf_list[i].name);
+                device->dev = dev_list[i];
+            } else {
+                device->dev = dev_list[idx];
+                INFO(ibrc_state->log_level, "get device index %d for IB device %s ",idx, hca_bdf_list[i].name);
+            }
+        }  else if (pe_hca_map_count) {
+            INFO(ibrc_state->log_level, "Select ib device by user NVSHMEM_HCA_PE_MAPPING order");
+            if (pe_hca_map_count) {
+                if (i < pe_hca_map_count) {
+                    int idx = get_device_index(pe_hca_mapping[i].name, dev_list, num_devices);
+                    INFO(ibrc_state->log_level,"get device index %d for device name %s", idx, pe_hca_mapping[i].name);
+                    if (idx < 0) {
+                        NVSHMEMI_WARN_PRINT(
+                            "Found invalid device name %s in NVSHMEM_HCA_PE_MAPPING, ignoring \n",
+                            pe_hca_mapping[i].name);
+                        goto out;
+                    }
+                    device->dev = dev_list[idx];
+                } else {
+                   INFO(ibrc_state->log_level, "No more devices in NVSHMEM_HCA_PE_MAPPING, ignoring");
+                    device->dev = dev_list[i];
+                }
+            }
+        } else {
+            INFO(ibrc_state->log_level, "Select ib device by default");
+            device->dev = dev_list[i];
+        }
 
         device->context = ftable.open_device(device->dev);
         if (!device->context) {
@@ -1794,6 +1899,9 @@ int nvshmemt_init(nvshmem_transport_t *t, struct nvshmemi_cuda_fn_table *table, 
                         }
                     }
                 }
+            } else if (ibrc_state->options->ENABLE_TOPO_AWARE_HCA_SELECTION && (gpu_count > transport->num_hca_devices)) {
+                // only 4nic enter this logic. 2 gpus share a nic
+                replicate_count = gpu_count/transport->num_hca_devices;
             }
 
             if (!allowed_device) {

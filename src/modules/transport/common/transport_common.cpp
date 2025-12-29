@@ -8,6 +8,9 @@
 #include <stdint.h>  // for uint64_t, uintptr_t
 #include <stdlib.h>  // for atoi, calloc, free, realloc
 #include <utility>
+#include <sys/types.h>
+#include <dirent.h>
+#include <ctype.h>
 #include "non_abi/nvshmemx_error.h"  // for NVSHMEMI_ERROR_PRINT, NVSHMEMX_E...
 
 struct transport_mem_handle_info_cache {
@@ -235,4 +238,27 @@ bool check_egm(void *addr, std::unordered_map<void *, size_t> *egm_map) {
         }
     }
     return false;
+}
+
+static uint64_t bdf_str_to_key(const char *bdf_str) {
+    uint16_t domain;
+    uint8_t bus, dev, func;
+
+    sscanf(bdf_str, "%4hx:%2hhx:%2hhx.%1hhx",
+           &domain, &bus, &dev, &func);
+
+    return ((uint64_t)domain << 40) |
+           ((uint64_t)bus << 32) |
+           ((uint64_t)dev << 24) |
+           ((uint64_t)func << 16);
+}
+int compare_bdf(const void *a, const void *b) {
+    const nvshmemt_hca_bdf_info *item_a = (const nvshmemt_hca_bdf_info*)a;
+    const nvshmemt_hca_bdf_info *item_b = (const nvshmemt_hca_bdf_info*)b;
+    uint64_t key_a = bdf_str_to_key(item_a->bdf);
+    uint64_t key_b = bdf_str_to_key(item_b->bdf);
+    return (key_a > key_b) - (key_a < key_b);
+}
+void sort_hca_bdf_list(nvshmemt_hca_bdf_info *list, int num_entries) {
+    qsort(list, num_entries, sizeof(nvshmemt_hca_bdf_info), compare_bdf);
 }

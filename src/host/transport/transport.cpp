@@ -390,7 +390,8 @@ int nvshmemi_setup_connections(nvshmemi_state_t *state) {
              */
             selected_devices[0] = tcurr->n_devices - 1;
             found_devices++;
-        } else if (nvshmemi_options.ENABLE_NIC_PE_MAPPING) {
+        } else if (nvshmemi_options.ENABLE_NIC_PE_MAPPING ||
+            (tcurr->need_topo_fix && tcurr->num_hca_devices == nvshmemi_options.HCA_COUNT_REQUIRING_TOPO_FIX)) {
             selected_devices[0] =
                 nvshmemi_state->mype_node % (tcurr->n_devices > 0 ? tcurr->n_devices : 1);
             INFO(NVSHMEM_INIT, "NVSHMEM_ENABLE_NIC_PE_MAPPING = 1, setting dev_id = %d",

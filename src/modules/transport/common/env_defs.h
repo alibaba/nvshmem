@@ -72,6 +72,8 @@ NVSHMEMI_ENV_DEF(IB_NUM_RC_PER_DEVICE, int, 1, NVSHMEMI_ENV_CAT_TRANSPORT,
 NVSHMEMI_ENV_DEF(IBGDA_ENABLE_SYSTEM_TRAFFIC_CLASS, bool, false, NVSHMEMI_ENV_CAT_TRANSPORT,
                  "When true, read and use global traffic class from sysfs (/sys/class/infiniband/.../traffic_class) "
                  "if available. System-level traffic class takes precedence over NVSHMEM_IB_TRAFFIC_CLASS.")
+NVSHMEMI_ENV_DEF(ENABLE_TOPO_AWARE_HCA_SELECTION, bool, false, NVSHMEMI_ENV_CAT_TRANSPORT,
+                 "Enable topology-aware HCA selection by sorting devices according to PCI BDF order")
 
 NVSHMEMI_ENV_DEF(HCA_PREFIX, string, "mlx5", NVSHMEMI_ENV_CAT_TRANSPORT,
                  "Prefix of HCA interface names. Example, mlx5, ibp.")

@@ -253,6 +253,32 @@ out:
     return false;
 }
 
+int nvshmemt_get_ib_iface_bdf(char *ib_name, char **bdf) {
+    int status;
+    char *last_slash = NULL;
+    char *path = NULL;
+    char device_path[MAXPATHSIZE];
+    status = snprintf(device_path, MAXPATHSIZE, "/sys/class/infiniband/%s/device", ib_name);
+    if (status < 0 || status >= MAXPATHSIZE) {
+        NVSHMEMI_ERROR_JMP(status, NVSHMEMX_ERROR_INTERNAL, out,
+                           "Unable to fill in device name.\n");
+    }
+    path = realpath(device_path, NULL);
+    NVSHMEMI_NULL_ERROR_JMP(path, status, NVSHMEMX_ERROR_OUT_OF_MEMORY, out, "realpath failed \n");
+    last_slash = strrchr(path, '/');
+    if (last_slash && *(last_slash + 1) != '\0') {
+        *bdf = strdup(last_slash + 1);
+        status = *bdf ? NVSHMEMX_SUCCESS : NVSHMEMX_ERROR_OUT_OF_MEMORY;
+    } else {
+        NVSHMEMI_ERROR_JMP(status, NVSHMEMX_ERROR_INTERNAL, out, "Invalid BDF format\n");
+    }
+    status = NVSHMEMX_SUCCESS;
+out:
+    if (path)
+        free(path);
+    return status;
+}
+
 int nvshmemt_ib_iface_get_mlx_path(ibv_device *dev, ibv_context *ctx, char **path,
                                    struct nvshmemt_ibv_function_table *ftable,
                                    struct nvshmemt_mlx5dv_function_table *mlx5dv_ftable,
